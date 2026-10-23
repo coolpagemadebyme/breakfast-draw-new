@@ -7,9 +7,7 @@
 <title>早餐店任務抽抽樂</title>
 
 <style>
-* {
-  box-sizing: border-box;
-}
+* { box-sizing: border-box; }
 
 body {
   margin: 0;
@@ -29,10 +27,7 @@ body {
   box-shadow: 0 5px 20px #00000012;
 }
 
-h1 {
-  color: #b66a32;
-  margin-bottom: 8px;
-}
+h1 { color: #b66a32; }
 
 .subtitle {
   color: #8b7968;
@@ -40,7 +35,7 @@ h1 {
 }
 
 .result {
-  min-height: 130px;
+  min-height: 140px;
   padding: 25px 12px;
   margin: 20px 0;
   border: 2px dashed #e5b77c;
@@ -65,17 +60,11 @@ button {
   color: white;
 }
 
-button:hover {
-  opacity: 0.85;
-}
+button:hover { opacity: 0.85; }
+button:disabled { opacity: 0.5; cursor: not-allowed; }
 
-.secondary {
-  background: #7d9b79;
-}
-
-.danger {
-  background: #b85c50;
-}
+.secondary { background: #7d9b79; }
+.danger { background: #b85c50; }
 
 input {
   width: 65%;
@@ -115,6 +104,12 @@ li button {
   font-size: 14px;
 }
 
+#status {
+  font-size: 13px;
+  color: #7d9b79;
+  margin: 12px;
+}
+
 </style>
 </head>
 
@@ -128,17 +123,21 @@ li button {
     看看今天誰會抽到有趣任務！
   </div>
 
+  <div id="status">正在連接雲端資料庫……</div>
+
   <div class="result" id="result">
-    按下抽取任務，看看會抽到什麼！
+    等待連線成功……
   </div>
 
-  <button onclick="drawTask()">🎲 抽取任務</button>
+  <button id="drawButton" onclick="drawTask()" disabled>
+    🎲 抽取任務
+  </button>
 
-  <p class="info" id="count"></p>
+  <p class="info" id="count">載入中……</p>
 
   <hr style="border:0;border-top:1px solid #eee5da;margin:25px 0;">
 
-  <h3>📝 任務管理</h3>
+  <h3>📝 共用任務管理</h3>
 
   <input
     id="newTask"
@@ -147,14 +146,43 @@ li button {
     onkeydown="if(event.key==='Enter') addTask()"
   >
 
-  <button onclick="addTask()">新增</button>
+  <button id="addButton" onclick="addTask()" disabled>
+    新增
+  </button>
 
   <ul id="taskList"></ul>
 
 </div>
 
-<script>
+<script type="module">
 
+import { initializeApp }
+  from "https://www.gstatic.com/firebasejs/13.1.0/firebase-app.js";
+
+import {
+  getAuth,
+  signInAnonymously
+} from "https://www.gstatic.com/firebasejs/13.1.0/firebase-auth.js";
+
+import {
+  getFirestore,
+  doc,
+  onSnapshot,
+  runTransaction
+} from "https://www.gstatic.com/firebasejs/13.1.0/firebase-firestore.js";
+
+// Firebase 網頁設定
+const firebaseConfig = {
+  apiKey: "AIzaSyAHECFLulPrlghpg89lFKNcrUA6FPmrfFA",
+  authDomain: "breakfast-draw-shared.firebaseapp.com",
+  projectId: "breakfast-draw-shared",
+  storageBucket: "breakfast-draw-shared.firebasestorage.app",
+  messagingSenderId: "1013622556420",
+  appId: "1:1013622556420:web:74a7b45cb987593eeff251",
+  measurementId: "G-GHZ1HSR95P"
+};
+
+// 預設任務
 const defaultTasks = [
   "影帝附身：用表情演出自己吃到美食的感受",
   "空氣演奏家：假裝自己正在演奏樂器 10 秒",
@@ -164,41 +192,81 @@ const defaultTasks = [
   "聯想大師：10 秒內說出 5 種紅色的東西"
 ];
 
-// 載入之前儲存的任務
-let tasks;
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
 
-try {
-  const savedTasks = localStorage.getItem("tasks");
-  tasks = savedTasks ? JSON.parse(savedTasks) : [...defaultTasks];
+// 所有人共用同一份任務資料
+const sharedRef = doc(db, "shared", "tasks");
 
-  if (!Array.isArray(tasks)) {
-    tasks = [...defaultTasks];
-  }
-} catch (error) {
-  tasks = [...defaultTasks];
+let tasks = [];
+let connected = false;
+
+const statusElement = document.getElementById("status");
+const resultElement = document.getElementById("result");
+const drawButton = document.getElementById("drawButton");
+const addButton = document.getElementById("addButton");
+
+// 更新狀態
+function setStatus(message) {
+  statusElement.textContent = message;
 }
 
-function saveTasks() {
-  localStorage.setItem("tasks", JSON.stringify(tasks));
+// 初始化雲端任務資料
+async function initializeTasks() {
+  await runTransaction(db, async (transaction) => {
+    const snapshot = await transaction.get(sharedRef);
+
+    if (!snapshot.exists()) {
+      transaction.set(sharedRef, {
+        tasks: defaultTasks
+      });
+    }
+  });
 }
 
-// 隨機抽取：不會刪除任務，可以無限抽
-function drawTask() {
+// 即時監聽雲端任務
+function listenTasks() {
+  onSnapshot(sharedRef, (snapshot) => {
+
+    if (snapshot.exists()) {
+      const data = snapshot.data();
+      tasks = Array.isArray(data.tasks) ? data.tasks : [];
+    } else {
+      tasks = [];
+    }
+
+    connected = true;
+
+    setStatus("🟢 雲端同步中，任務清單已連線");
+
+    drawButton.disabled = false;
+    addButton.disabled = false;
+
+    updateDisplay();
+
+  }, (error) => {
+
+    setStatus("連線失敗：" + error.message);
+
+  });
+}
+
+// 隨機抽取，每個人獨立
+window.drawTask = function() {
 
   if (tasks.length === 0) {
-    document.getElementById("result").textContent =
-      "目前沒有任務，請先新增任務！";
+    resultElement.textContent = "目前沒有任務，請先新增！";
     return;
   }
 
   const index = Math.floor(Math.random() * tasks.length);
 
-  document.getElementById("result").textContent =
-    tasks[index];
-}
+  resultElement.textContent = tasks[index];
+};
 
-// 新增任務
-function addTask() {
+// 新增任務到雲端
+window.addTask = async function() {
 
   const input = document.getElementById("newTask");
   const task = input.value.trim();
@@ -213,27 +281,75 @@ function addTask() {
     return;
   }
 
-  tasks.push(task);
+  addButton.disabled = true;
 
-  input.value = "";
+  try {
 
-  saveTasks();
-  updateDisplay();
-}
+    await runTransaction(db, async (transaction) => {
 
-// 刪除任務
-function deleteTask(task) {
+      const snapshot = await transaction.get(sharedRef);
 
-  tasks = tasks.filter(t => t !== task);
+      if (!snapshot.exists()) {
+        throw new Error("任務資料不存在，請重新整理網頁");
+      }
 
-  saveTasks();
-  updateDisplay();
+      const currentTasks = snapshot.data().tasks || [];
 
-  document.getElementById("result").textContent =
-    "任務已更新，請重新抽取！";
-}
+      if (currentTasks.includes(task)) {
+        throw new Error("這個任務已經存在！");
+      }
 
-// 更新畫面
+      transaction.update(sharedRef, {
+        tasks: [...currentTasks, task]
+      });
+
+    });
+
+    input.value = "";
+
+  } catch (error) {
+
+    alert("新增失敗：" + error.message);
+
+  } finally {
+
+    addButton.disabled = !connected;
+
+  }
+};
+
+// 從雲端刪除任務
+window.deleteTask = async function(task) {
+
+  if (!confirm("確定要刪除這個任務嗎？所有人的清單都會同步更新。")) {
+    return;
+  }
+
+  try {
+
+    await runTransaction(db, async (transaction) => {
+
+      const snapshot = await transaction.get(sharedRef);
+
+      if (!snapshot.exists()) return;
+
+      const currentTasks = snapshot.data().tasks || [];
+
+      transaction.update(sharedRef, {
+        tasks: currentTasks.filter(t => t !== task)
+      });
+
+    });
+
+  } catch (error) {
+
+    alert("刪除失敗：" + error.message);
+
+  }
+
+};
+
+// 更新任務清單畫面
 function updateDisplay() {
 
   document.getElementById("count").textContent =
@@ -259,10 +375,28 @@ function updateDisplay() {
     li.appendChild(button);
 
     list.appendChild(li);
+
   });
+
 }
 
-updateDisplay();
+// 啟動匿名登入
+try {
+
+  await signInAnonymously(auth);
+
+  await initializeTasks();
+
+  listenTasks();
+
+} catch (error) {
+
+  setStatus("連線失敗：" + error.message);
+
+  resultElement.textContent =
+    "無法連接資料庫，請檢查 Firebase 設定。";
+
+}
 
 </script>
 
