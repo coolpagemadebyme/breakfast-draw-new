@@ -1,0 +1,270 @@
+
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>早餐店任務抽抽樂</title>
+
+<style>
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 24px 16px;
+  font-family: "Microsoft JhengHei", sans-serif;
+  background: #fff8e9;
+  color: #493525;
+  text-align: center;
+}
+
+.container {
+  max-width: 520px;
+  margin: 25px auto;
+  padding: 25px 20px;
+  background: white;
+  border-radius: 20px;
+  box-shadow: 0 5px 20px #00000012;
+}
+
+h1 {
+  color: #b66a32;
+  margin-bottom: 8px;
+}
+
+.subtitle {
+  color: #8b7968;
+  margin-bottom: 25px;
+}
+
+.result {
+  min-height: 130px;
+  padding: 25px 12px;
+  margin: 20px 0;
+  border: 2px dashed #e5b77c;
+  border-radius: 15px;
+  background: #fffaf2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 23px;
+  font-weight: bold;
+  line-height: 1.6;
+}
+
+button {
+  border: none;
+  border-radius: 12px;
+  padding: 12px 18px;
+  margin: 5px;
+  font-size: 16px;
+  cursor: pointer;
+  background: #bd783f;
+  color: white;
+}
+
+button:hover {
+  opacity: 0.85;
+}
+
+.secondary {
+  background: #7d9b79;
+}
+
+.danger {
+  background: #b85c50;
+}
+
+input {
+  width: 65%;
+  padding: 12px;
+  border: 1px solid #d8c6b2;
+  border-radius: 10px;
+  font-size: 16px;
+}
+
+ul {
+  padding: 0;
+  list-style: none;
+  text-align: left;
+}
+
+li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 9px;
+  border-bottom: 1px solid #eee5da;
+}
+
+li span {
+  flex: 1;
+  line-height: 1.5;
+}
+
+li button {
+  padding: 6px 10px;
+  font-size: 13px;
+}
+
+.info {
+  color: #8b7968;
+  font-size: 14px;
+}
+
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+  <h1>🍳 早餐店任務抽抽樂</h1>
+
+  <div class="subtitle">
+    看看今天誰會抽到有趣任務！
+  </div>
+
+  <div class="result" id="result">
+    按下抽取任務，看看會抽到什麼！
+  </div>
+
+  <button onclick="drawTask()">🎲 抽取任務</button>
+
+  <p class="info" id="count"></p>
+
+  <hr style="border:0;border-top:1px solid #eee5da;margin:25px 0;">
+
+  <h3>📝 任務管理</h3>
+
+  <input
+    id="newTask"
+    type="text"
+    placeholder="輸入新任務"
+    onkeydown="if(event.key==='Enter') addTask()"
+  >
+
+  <button onclick="addTask()">新增</button>
+
+  <ul id="taskList"></ul>
+
+</div>
+
+<script>
+
+const defaultTasks = [
+  "影帝附身：用表情演出自己吃到美食的感受",
+  "空氣演奏家：假裝自己正在演奏樂器 10 秒",
+  "頒獎典禮：假裝自己獲得早餐界年度最佳吃貨獎",
+  "左右手互換：接下來使用非慣用手拿餐具",
+  "快問快答：10 秒內說出 5 種早餐店食物",
+  "聯想大師：10 秒內說出 5 種紅色的東西"
+];
+
+// 載入之前儲存的任務
+let tasks;
+
+try {
+  const savedTasks = localStorage.getItem("tasks");
+  tasks = savedTasks ? JSON.parse(savedTasks) : [...defaultTasks];
+
+  if (!Array.isArray(tasks)) {
+    tasks = [...defaultTasks];
+  }
+} catch (error) {
+  tasks = [...defaultTasks];
+}
+
+function saveTasks() {
+  localStorage.setItem("tasks", JSON.stringify(tasks));
+}
+
+// 隨機抽取：不會刪除任務，可以無限抽
+function drawTask() {
+
+  if (tasks.length === 0) {
+    document.getElementById("result").textContent =
+      "目前沒有任務，請先新增任務！";
+    return;
+  }
+
+  const index = Math.floor(Math.random() * tasks.length);
+
+  document.getElementById("result").textContent =
+    tasks[index];
+}
+
+// 新增任務
+function addTask() {
+
+  const input = document.getElementById("newTask");
+  const task = input.value.trim();
+
+  if (!task) {
+    alert("請先輸入任務！");
+    return;
+  }
+
+  if (tasks.includes(task)) {
+    alert("這個任務已經存在！");
+    return;
+  }
+
+  tasks.push(task);
+
+  input.value = "";
+
+  saveTasks();
+  updateDisplay();
+}
+
+// 刪除任務
+function deleteTask(task) {
+
+  tasks = tasks.filter(t => t !== task);
+
+  saveTasks();
+  updateDisplay();
+
+  document.getElementById("result").textContent =
+    "任務已更新，請重新抽取！";
+}
+
+// 更新畫面
+function updateDisplay() {
+
+  document.getElementById("count").textContent =
+    `目前共有 ${tasks.length} 個任務，可以無限抽取！`;
+
+  const list = document.getElementById("taskList");
+
+  list.innerHTML = "";
+
+  tasks.forEach(task => {
+
+    const li = document.createElement("li");
+
+    const span = document.createElement("span");
+    span.textContent = task;
+
+    const button = document.createElement("button");
+    button.className = "danger";
+    button.textContent = "刪除";
+    button.onclick = () => deleteTask(task);
+
+    li.appendChild(span);
+    li.appendChild(button);
+
+    list.appendChild(li);
+  });
+}
+
+updateDisplay();
+
+</script>
+
+</body>
+</html>
